@@ -1,0 +1,4 @@
+---
+ansible_become: true
+
+timezone: Asia/Tokyo

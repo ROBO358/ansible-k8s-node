@@ -1,0 +1,32 @@
+---
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Install chorony
+  ansible.builtin.package:
+    name: chrony
+    state: present
+
+- name: Disable default servers
+  ansible.builtin.replace:
+    dest: /etc/chrony.conf
+    regexp: ^(pool \d+..*.pool.ntp.org iburst)
+    replace: "# \\1"
+
+- name: Add ntp servers
+  ansible.builtin.blockinfile:
+    dest: /etc/chrony.conf
+    content: |
+      pool ntp.nict.jp iburst
+  notify:
+    - Restart chrony
+
+- name: Execute chorony makestep
+  ansible.builtin.command: chronyc -a makestep
+  changed_when: false
+
+- name: Enable chorony service
+  ansible.builtin.service:
+    name: chronyd
+    enabled: true

@@ -1,0 +1,5 @@
+---
+- name: Boostrap a target server
+  hosts: all
+  roles:
+    - bootstrap
