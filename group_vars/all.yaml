@@ -1,4 +1,15 @@
 ---
 ansible_become: true
 
-timezone: Asia/Tokyo
+timezone: "Asia/Tokyo"
+
+network:
+  interface: "enp1s0"
+
+k8s:
+  version: 1.29
+  patch_version: 2
+  kubeadm_config_path: "/etc/kubernetes/init_kubelet.yaml"
+
+cri_o:
+  project_path: "prerelease:/main"

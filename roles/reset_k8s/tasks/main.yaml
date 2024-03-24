@@ -1,0 +1,15 @@
+---
+- name: Reset kubeadm
+  ansible.builtin.command: kubeadm reset --force
+
+- name: Reset iptables
+  ansible.builtin.command: iptables -F
+
+- name: Reset iptables
+  ansible.builtin.command: iptables -t nat -F
+
+- name: Reset iptables
+  ansible.builtin.command: iptables -t mangle -F
+
+- name: Reset iptables
+  ansible.builtin.command: iptables -X

@@ -4,7 +4,7 @@
     name: "{{ timezone }}"
 
 - name: Install chorony
-  ansible.builtin.package:
+  ansible.builtin.dnf:
     name: chrony
     state: present
 
@@ -30,3 +30,4 @@
   ansible.builtin.service:
     name: chronyd
     enabled: true
+    state: started

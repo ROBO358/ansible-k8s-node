@@ -1,0 +1,11 @@
+---
+firewalld:
+  allowed_ports:
+    - "6443"
+    - "2379-2380"
+    - "10250"
+    - "10259"
+    - "10257"
+
+k8s:
+  control_plane_endpoint: "192.168.0.190"

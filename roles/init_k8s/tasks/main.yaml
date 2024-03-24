@@ -1,0 +1,163 @@
+---
+- name: Disable swap
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+
+- name: Swap off(permanently)
+  ansible.builtin.replace:
+    dest: /etc/fstab
+    regexp: ^(\/dev\/mapper\/.*-swap.*swap.*)
+    replace: "# \\1"
+
+- name: Remove cockpit from firewalld rules
+  ansible.posix.firewalld:
+    service: cockpit
+    state: disabled
+
+- name: Remove cockpit
+  ansible.builtin.dnf:
+    name: cockpit
+    state: absent
+
+- name: Setup firewall
+  ansible.posix.firewalld:
+    state: enabled
+    permanent: true
+    immediate: true
+    port: "{{ item }}/tcp"
+  loop: "{{ firewalld.allowed_ports }}"
+
+- name: Enable firewalld service
+  ansible.builtin.service:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: Add repository
+  ansible.builtin.yum_repository:
+    name: "{{ item.name }}"
+    description: "{{ item.name }}"
+    baseurl: "{{ item.baseurl }}"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "{{ item.gpgkey }}"
+    exclude: "{{ item.exclude | default([]) }}"
+  loop:
+    - { name: "kubernetes", baseurl: "https://pkgs.k8s.io/core:/stable:/v{{ k8s.version }}/rpm/", gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ k8s.version }}/rpm/repodata/repomd.xml.key", exclude: ["kubelet", "kubeadm", "kubectl"] }
+    - { name: "cri-o", baseurl: "https://pkgs.k8s.io/addons:/cri-o:/{{ cri_o.project_path }}/rpm/", gpgkey: "https://pkgs.k8s.io/addons:/cri-o:/{{ cri_o.project_path }}/rpm/repodata/repomd.xml.key" }
+
+- name: Install packages(general repo)
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+    disablerepo: "*"
+    enablerepo:
+      - baseos
+      - appstream
+  loop:
+    - curl
+    - jq
+    - podman
+
+- name: Install packages(k8s repo)
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+    disablerepo: "*"
+    enablerepo:
+      - kubernetes
+      - cri-o
+    disable_excludes: kubernetes
+  loop:
+    - container-selinux
+    - cri-o
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Set modprobe
+  community.general.modprobe:
+    name: "{{ item }}"
+    persistent: present
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Setup sysctl
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: 1
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    sysctl_set: true
+    state: present
+  loop:
+    - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-ip6tables
+    - net.ipv4.ip_forward
+
+- name: Enable services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - crio
+    - kubelet
+
+- name: Create kube-vip manifest
+  ansible.builtin.shell: |
+    export VIP={{ k8s.control_plane_endpoint }}
+    export INTERFACE={{ network.interface }}
+    KVVERSION=$(curl -sL https://api.github.com/repos/kube-vip/kube-vip/releases | jq -r ".[0].name")
+    alias kube-vip="podman run --network host --rm ghcr.io/kube-vip/kube-vip:$KVVERSION"
+
+    kube-vip manifest pod \
+        --interface $INTERFACE \
+        --address $VIP \
+        --controlplane \
+        --services \
+        --arp \
+        --leaderElection | tee /etc/kubernetes/manifests/kube-vip.yaml
+
+- name: Set kubeadm-config.yaml
+  ansible.builtin.template:
+    src: init_kubelet.yaml.j2
+    dest: "{{ k8s.kubeadm_config_path }}"
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Temporarily circumvent reported issues(https://github.com/kube-vip/kube-vip/issues/684)
+  ansible.builtin.lineinfile:
+    path: /etc/kubernetes/manifests/kube-vip.yaml
+    search_string: "path: /etc/kubernetes/admin.conf"
+    line: "      path: /etc/kubernetes/super-admin.conf"
+    state: present
+
+- name: Initialize k8s cluster
+  when: inventory_hostname in groups['origin']
+  register: kubeadm_init
+  ansible.builtin.command:
+    argv:
+      - "kubeadm"
+      - "init"
+      - "--config={{ k8s.kubeadm_config_path }}"
+      - "--upload-certs"
+
+- name: Set cluster join token
+  ansible.builtin.shell: kubeadm token list -o json | jq '. | select(.usages == ["authentication", "signing"]) | .token'
+  register: token
+
+- name: Show previous command result
+  ansible.builtin.debug:
+    var: token
+
+# - name: Join k8s cluster
+
+- name: Revert temporarily circumvent reported issues(https://github.com/kube-vip/kube-vip/issues/684)
+  ansible.builtin.lineinfile:
+    path: /etc/kubernetes/manifests/kube-vip.yaml
+    search_string: "path: /etc/kubernetes/super-admin.conf"
+    line: "      path: /etc/kubernetes/admin.conf"
+    state: present

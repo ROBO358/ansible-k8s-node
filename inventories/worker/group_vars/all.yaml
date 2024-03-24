@@ -1,0 +1,5 @@
+---
+firewalld:
+  allowed_ports:
+    - "10250"
+    - "30000-32767"

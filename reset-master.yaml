@@ -1,0 +1,5 @@
+---
+- name: Reset k8s master
+  hosts: origin
+  roles:
+    - reset_k8s
