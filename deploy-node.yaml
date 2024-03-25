@@ -4,3 +4,4 @@
   roles:
     - bootstrap
     - init_k8s
+    - kubeadm_init

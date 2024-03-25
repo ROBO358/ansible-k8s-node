@@ -1,0 +1,94 @@
+---
+- name: Create kube-vip manifest
+  ansible.builtin.shell: |
+    export VIP={{ k8s.control_plane_endpoint }}
+    export INTERFACE={{ network.interface }}
+    KVVERSION=$(curl -sL https://api.github.com/repos/kube-vip/kube-vip/releases | jq -r ".[0].name")
+    alias kube-vip="podman run --network host --rm ghcr.io/kube-vip/kube-vip:$KVVERSION"
+
+    kube-vip manifest pod \
+        --interface $INTERFACE \
+        --address $VIP \
+        --controlplane \
+        --services \
+        --arp \
+        --leaderElection | tee /etc/kubernetes/manifests/kube-vip.yaml
+
+- name: Set kubeadm-config.yaml
+  ansible.builtin.template:
+    src: init_kubelet.yaml.j2
+    dest: "{{ k8s.kubeadm_config_path }}"
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Temporarily circumvent reported issues(https://github.com/kube-vip/kube-vip/issues/684)
+  ansible.builtin.lineinfile:
+    path: /etc/kubernetes/manifests/kube-vip.yaml
+    search_string: "path: /etc/kubernetes/admin.conf"
+    line: "      path: /etc/kubernetes/super-admin.conf"
+    state: present
+
+- name: Initialize k8s cluster
+  when: inventory_hostname in groups['origin']
+  register: kubeadm_init
+  ansible.builtin.command:
+    argv:
+      - "kubeadm"
+      - "init"
+      - "--config={{ k8s.kubeadm_config_path }}"
+      - "--upload-certs"
+
+- name: Revert temporarily circumvent reported issues(https://github.com/kube-vip/kube-vip/issues/684)
+  ansible.builtin.lineinfile:
+    path: /etc/kubernetes/manifests/kube-vip.yaml
+    search_string: "path: /etc/kubernetes/super-admin.conf"
+    line: "      path: /etc/kubernetes/admin.conf"
+    state: present
+
+- name: Create .kube folder
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+  loop:
+    - "~{{ ansible_env.USER }}/.kube"
+    - "/tmp/kubeadm"
+
+- name: Copy admin.conf to .kube folder
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "~{{ ansible_env.USER }}/.kube/config"
+    owner: "{{ ansible_env.USER }}"
+    group: "{{ ansible_env.USER }}"
+    remote_src: yes
+
+- name: Copy admin.conf to /tmp/kubeadm/config
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/tmp/kubeadm/config"
+    remote_src: yes
+
+- name: Copy kubeadm token
+  ansible.builtin.command:
+    argv:
+      - "kubeadm"
+      - "token"
+      - "generate"
+  register: kubeadm_token
+
+- name: Copy kubeadm join command
+  ansible.builtin.command:
+    argv:
+      - "kubeadm"
+      - "token"
+      - "create"
+      - "{{ kubeadm_token.stdout }}"
+      - "--print-join-command"
+      - "--ttl=1h"
+  register: kubeadm_join_command
+
+- name: debug kubeadm join command
+  ansible.builtin.debug:
+    msg: "{{ kubeadm_join_command.stdout }}"
