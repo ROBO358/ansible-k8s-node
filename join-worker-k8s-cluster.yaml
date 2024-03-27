@@ -1,0 +1,11 @@
+---
+- name: Boostrap a target server
+  hosts: worker
+  roles:
+    - bootstrap
+    - init_k8s
+
+- name: Join worker to k8s cluster
+  hosts: all
+  roles:
+    - kubeadm_join_worker

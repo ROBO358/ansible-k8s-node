@@ -43,7 +43,7 @@
     gpgkey: "{{ item.gpgkey }}"
     exclude: "{{ item.exclude | default([]) }}"
   loop:
-    - { name: "kubernetes", baseurl: "https://pkgs.k8s.io/core:/stable:/v{{ k8s.version }}/rpm/", gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ k8s.version }}/rpm/repodata/repomd.xml.key", exclude: ["kubelet", "kubeadm", "kubectl"] }
+    - { name: "kubernetes", baseurl: "https://pkgs.k8s.io/core:/stable:/v{{ k8s.version }}/rpm/", gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ k8s.version }}/rpm/repodata/repomd.xml.key" }
     - { name: "cri-o", baseurl: "https://pkgs.k8s.io/addons:/cri-o:/{{ cri_o.project_path }}/rpm/", gpgkey: "https://pkgs.k8s.io/addons:/cri-o:/{{ cri_o.project_path }}/rpm/repodata/repomd.xml.key" }
 
 - name: Install packages(general repo)
@@ -67,6 +67,7 @@
     enablerepo:
       - kubernetes
       - cri-o
+      - appstream
     disable_excludes: kubernetes
   loop:
     - container-selinux

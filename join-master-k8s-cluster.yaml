@@ -1,0 +1,11 @@
+---
+- name: Boostrap a target server
+  hosts: master_mirror
+  roles:
+    - bootstrap
+    - init_k8s
+
+- name: Join master to k8s cluster
+  hosts: all
+  roles:
+    - kubeadm_join_master

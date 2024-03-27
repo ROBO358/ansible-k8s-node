@@ -1,0 +1,41 @@
+- name: Generate kubeadm join token
+  when: inventory_hostname in groups['master_origin']
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  block:
+    - name: Copy kubeadm join command
+      ansible.builtin.shell:
+        argv:
+          - "kubeadm"
+          - "token"
+          - "create"
+          - "--print-join-command"
+          - "--ttl=1h"
+      register: kubeadm_join_command
+
+    - name: Copy kubeadm certificate key
+      ansible.builtin.shell:
+        cmd: "kubeadm init phase upload-certs --upload-certs | grep -vw -e certificate -e Namespace"
+      register: kubeadm_certificate_key
+
+- name: Join k8s cluster
+  when: inventory_hostname in groups['master_mirror']
+  block:
+    - name: Join k8s cluster
+      ansible.builtin.command:
+        cmd: "{{ hostvars[groups['master_origin'][0]]['kubeadm_join_command']['stdout_lines'][0] }} --control-plane --certificate-key {{ hostvars[groups['master_origin'][0]]['kubeadm_certificate_key']['stdout'] }}"
+
+    - name: Create .kube folder
+      file:
+        path: "~{{ local_user }}/.kube"
+        state: directory
+        owner: "{{ local_user }}"
+        group: "{{ local_user }}"
+
+    - name: Copy admin.conf to .kube folder
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "~{{ local_user }}/.kube/config"
+        owner: "{{ local_user }}"
+        group: "{{ local_user }}"
+        remote_src: yes

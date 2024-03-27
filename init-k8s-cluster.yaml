@@ -1,7 +1,7 @@
 ---
 - name: Boostrap a target server
-  hosts: all
+  hosts: master_origin
   roles:
     - bootstrap
     - init_k8s
-    - kubeadm_init
+    - kubeadm_init_master

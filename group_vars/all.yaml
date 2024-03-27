@@ -1,6 +1,8 @@
 ---
 ansible_become: true
 
+local_user: robo358
+
 timezone: "Asia/Tokyo"
 
 network:
@@ -13,3 +15,6 @@ k8s:
 
 cri_o:
   project_path: "prerelease:/main"
+
+cilium:
+  version: 1.15.3

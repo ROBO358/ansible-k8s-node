@@ -1,0 +1,21 @@
+- name: Generate kubeadm join token
+  when: inventory_hostname in groups['master_origin']
+  environment:
+    KUBECONFIG: "/etc/kubernetes/admin.conf"
+  block:
+    - name: Copy kubeadm join command
+      ansible.builtin.shell:
+        argv:
+          - "kubeadm"
+          - "token"
+          - "create"
+          - "--print-join-command"
+          - "--ttl=1h"
+      register: kubeadm_join_command
+
+- name: Join k8s cluster
+  when: inventory_hostname in groups['worker']
+  block:
+    - name: Join k8s cluster
+      ansible.builtin.command:
+        cmd: "{{ hostvars[groups['master_origin'][0]]['kubeadm_join_command']['stdout_lines'][0] }}"
